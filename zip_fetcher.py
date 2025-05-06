@@ -35,7 +35,7 @@ class ZipFetcher:
         self.console.print(self.message["welcome"], style="green blink")
 
         # regex mønstre
-        self.zip_pat = r"[A-Za-z0-9%_]+\.zip" # .zip-fil
+        self.zip_pat = r"[A-Za-z0-9%_]+\.pdf" # .zip-fil
         self.subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
         self.invalid_pat = r'[<>:"|?\*]' # ugyldige tegn for mappenavn ## TODO endre regler for ':' ?
     
@@ -143,8 +143,9 @@ class ZipFetcher:
             self.console.print(f"\n[bold green blink]{self.message['user_interrupt']}[/bold green blink]")
             
             self._retry()
+            return
 
-        else:
+        elif self.filetype=="zip":
             for link in track(links,self.message["download_tracker"].format(n_files=n_files,out_dir=out_dir)):
                 # isolerer filnavn fra lenke
                 name = re.search(self.zip_pat, link).group()
@@ -161,11 +162,25 @@ class ZipFetcher:
                 # hvis valgt: sletter zipfil etter ekstraksjon
                 if cleanup and os.path.exists(name):
                     os.remove(name)
+        
+        elif self.filetype=="pdf":
+            for link in track(links,self.message["download_tracker"].format(n_files=n_files,out_dir=out_dir)):
+                # isolerer filnavn fra lenke
+                name = re.search(self.zip_pat, link).group()
+                
+                if not os.path.exists(out_dir):
+                    os.mkdir(out_dir)
 
-            self.console.print(f"\n[bold green blink]{self.message['finished']}[/bold green blink]")
+                # laster ned fil med link
+                urllib.request.urlretrieve(link, f"{out_dir}/{name}")
+
+
+        self.console.print(f"\n[bold green blink]{self.message['finished']}[/bold green blink]")
 
     
     def main(self) -> None:
+        # TODO implementer ulike filtyper ordentlig (inkl alternativ meldingsflyt)
+        self.filetype = "zip"
 
         self._process_downloads()
 
