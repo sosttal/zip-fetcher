@@ -35,7 +35,7 @@ class ZipFetcher:
         self.console.print(self.message["welcome"], style="green blink")
 
         # regex mønstre
-        self.zip_pat = r"[A-Za-z_0-9]+\.zip" # .zip-fil
+        self.zip_pat = r"[A-Za-z0-9%_]+\.zip" # .zip-fil
         self.subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
         self.invalid_pat = r'[<>:"|?\*]' # ugyldige tegn for mappenavn ## TODO endre regler for ':' ?
     
@@ -61,9 +61,13 @@ class ZipFetcher:
             self._terminate_program()
         
     
-    def _validate_input(self,input:str, regex:str) -> bool:
-        # NOTE uklar logikk TODO fikse/endre?
-        if re.search(regex, input) is None:
+    def _validate_path(self,path:str) -> bool:
+        """
+        Check if path contains invalid symbols.
+        -> True if no invalid symbols
+        -> False if any invalid symbol
+        """
+        if re.search(self.invalid_pat, path) is None:
             return True
         else:
             return False
@@ -92,8 +96,9 @@ class ZipFetcher:
         url = Prompt.ask(self.message["prompt_url"], default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
 
         link_pat = f"{url}{self.zip_pat}" if url[-1] == "/" else f"{url}/{self.zip_pat}" # .zip-fil lenker
+        relative_link_pat = r"\/[0-9A-Za-z\/_-]*\/"
 
-        # leser inn kildekode til angitt nettside/url
+        # leser inn kildekode fra angitt nettside/url
         try:
             with urllib.request.urlopen(url) as page:
                 self.html = page.read().decode("utf8")
@@ -103,11 +108,25 @@ class ZipFetcher:
 
         # finner alle relevante lenker og fjerner duplikater
         links = re.findall(link_pat, self.html)
-        links = set(links)
+        if len(links) < 1:
+            url_root = re.search(r"http[s]{0,1}:\/\/([a-z0-9]+\.)+[a-z]{2,5}", url).group()
+            link_pat = f"{relative_link_pat}{self.zip_pat}"
+
+            links = re.findall(link_pat, self.html)
+
+            if len(links) < 1:
+                self._error(f"{self.message['err_no_zip_found']} {url}")
+                return
+
+            links = [f"{url_root}{link}" for link in links]
+            links = set(links)
+            
+        else:
+            links = set(links)
 
         out_dir = Prompt.ask(self.message["prompt_out_dir"], default=".")
 
-        while not self._validate_input(out_dir, self.invalid_pat):
+        while not self._validate_path(out_dir):
             self.console.print(f"{self.message['warn_invalid_char']} [#fc0303]{self.invalid_chars}[/#fc0303]")
             out_dir = Prompt.ask(f"{self.message['prompt_out_dir']}", default=".")
         
@@ -117,11 +136,6 @@ class ZipFetcher:
 
         # antall .zip-lenker funnet
         n_files = len(links)
-
-        # verifiserer at det er minst et arkiv på angitt url
-        if not n_files > 0:
-            self._error(f"{self.message['err_no_zip_found']} {url}")
-            return
 
         confirm = self._summary_confirm(url, n_files, out_dir, cleanup)
 
