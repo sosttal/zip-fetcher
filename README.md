@@ -4,6 +4,7 @@
 
 Video of full run:
 
+![](example/mappe_vid.mp4)
 <video width="320" height="240" controls>
   <source src="example/mappe_vid.mp4" type="video/mp4">
 </video>
