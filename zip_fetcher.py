@@ -10,98 +10,145 @@ from rich.prompt import Prompt
 from rich.panel import Panel
 from rich.table import Table
 
-console = Console()
-
-logo = """███████╗██╗██████╗       ███████╗███████╗████████╗ ██████╗██╗  ██╗███████╗██████╗   TM
+LOGO = """███████╗██╗██████╗       ███████╗███████╗████████╗ ██████╗██╗  ██╗███████╗██████╗   TM
 ╚══███╔╝██║██╔══██╗      ██╔════╝██╔════╝╚══██╔══╝██╔════╝██║  ██║██╔════╝██╔══██╗
   ███╔╝ ██║██████╔╝█████╗█████╗  █████╗     ██║   ██║     ███████║█████╗  ██████╔╝
  ███╔╝  ██║██╔═══╝ ╚════╝██╔══╝  ██╔══╝     ██║   ██║     ██╔══██║██╔══╝  ██╔══██╗
 ███████╗██║██║           ██║     ███████╗   ██║   ╚██████╗██║  ██║███████╗██║  ██║
 ╚══════╝╚═╝╚═╝           ╚═╝     ╚══════╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝"""
 
-
-def end():
-    input("\nTrykk enter for å avslutte.")
-    exit(0)
-
-def error(msg):
-    console.print(f"\n[blink #fc0303]FEIL[/blink #fc0303]: {msg}")
-    end()
-
-W = os.get_terminal_size()[0]
-sidepad = int((W-88)/2)
-
-console.print(Panel(logo, box=box.DOUBLE, padding=(2,sidepad), style="#90fc03", width=W, expand=False,subtitle="[#90fc03]av [u link https://talleraas.it/]talleraas.it[/u link https://talleraas.it/][/#90fc03]"))
-
-# regex mønstre
-zip_pat = r"[A-Za-z_0-9]+\.zip" # .zip-fil
-subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
-
-url = Prompt.ask("Angi url å hente .zip-arkiver fra", default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
-
-link_pat = f"{url}{zip_pat}" # .zip-fil lenker
-
-# ekstraherer filbaner (for alle lenker til .zip-filer) fra url
-try:
-    with urllib.request.urlopen(url) as page:
-        html = page.read().decode("utf8")
-except:
-    error("Ugyldig url.")
-
-links = re.findall(link_pat,html)
-links = set(links)
-
-folder_out = Prompt.ask("Angi mappe for output (enter for å bruke gjeldende mappe)", default=".")
+class ZipFetcher:
     
-clean = Prompt.ask("Beholde .zip-arkiver?", choices=["y","n"], default="n")
+    def __init__(self):
 
-cleanup = False if clean == "y" else True
+        self.console = Console()
 
-# antall .zip-lenker funnet
-n_files = len(links)
+        self.logo = LOGO
 
-if not n_files > 0:
-    error(f"Fant ingen .zip-arkiver på: {url}")
-
-# oppsummering og bekreftelse
-summary = Table(title="Oppsummering:", box=box.DOUBLE)
-
-summary.add_column("", justify="right", style="cyan")
-summary.add_column("", justify="left", style="magenta")
-summary.show_header = False
-summary.show_lines = True
-
-summary.add_row("Henter fra:", url)
-summary.add_row("Antall arkiver funnet:", f"{n_files}")
-summary.add_row("Output-mappe:", folder_out)
-summary.add_row("Behold arkiv-filer?", f"{'NEI' if cleanup else 'JA'}")
-
-console.print(summary)
-
-confirm = Prompt.ask("Start nedlasting?", choices=["y","n"], default="y")
-
-if confirm == "n":
-    console.print("\n[bold green blink]Avbrutt av bruker![/bold green blink]")
+        # regex mønstre
+        self.zip_pat = r"[A-Za-z_0-9]+\.zip" # .zip-fil
+        self.subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
+        self.invalid_chars = r'[<>:"|?\*]' # ugyldige tegn for mappenavn ## TODO endre regler for ':' ?
     
-    end()
 
-for link in track(links,f"Laster ned {n_files} arkiver og ekstraherer til '{folder_out}'..."):
-    # henter filnavn fra lenke
-    name = re.search(zip_pat, link).group()
+    def _end(self) -> None:
+        input("\nTrykk enter for å avslutte... ")
+        exit(0)
 
-    # laster ned fil med link
-    urllib.request.urlretrieve(link, name)
 
-    # pakker ut innhold til folder_out/name
-    with zipfile.ZipFile(name, 'r') as zip_ref:
-        subfolder = re.search(subfold_pat,name).group()
+    def _error(self,msg) -> None:
+        self.console.print(f"\n[blink #fc0303]FEIL[/blink #fc0303]: {msg}")
+
+        self._retry()
+
+
+    def _retry(self) -> None:
+        q = Prompt.ask("Starte på nytt?", choices=["y","n"], default="n")
+
+        if q == "y":
+            self.console.print()
+            self._core()
+        else:
+            self._end()
         
-        zip_ref.extractall(f"{folder_out}/{subfolder}")
+    
+    def _validate_input(self,input:str, regex:str) -> bool:
+        if re.search(regex, input) is None:
+            return True
+        else:
+            return False
+    
 
-    # sletter zipfil etter ekstraksjon
-    if cleanup:
-        os.remove(name)
+    def _summary_confirm(self) -> bool:
+        # oppsummering og bekreftelse
+        summary = Table(title="Oppsummering:", box=box.DOUBLE)
 
-console.print("\n[bold green blink]Nedlasting/ekstraksjon fullført![/bold green blink]")
+        summary.add_column("", justify="right", style="cyan")
+        summary.add_column("", justify="left", style="magenta")
+        summary.show_header = False
+        summary.show_lines = True
 
-end()
+        summary.add_row("Henter fra:", self.url)
+        summary.add_row("Antall arkiver funnet:", f"{self.n_files}")
+        summary.add_row("Output-mappe:", self.out_dir)
+        summary.add_row("Behold arkiv-filer?", f"{'NEI' if self.cleanup else 'JA'}")
+
+        self.console.print(summary)
+
+        return True if Prompt.ask("Start nedlasting?", choices=["y","n"], default="y") == "y" else False
+    
+
+    def _core(self) -> None:
+        self.url = Prompt.ask("Angi url å hente .zip-arkiver fra", default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
+
+        link_pat = f"{self.url}{self.zip_pat}" if self.url[-1] == "/" else f"{self.url}/{self.zip_pat}" # .zip-fil lenker
+
+        # leser inn kildekode til angitt nettside/url
+        try:
+            with urllib.request.urlopen(self.url) as page:
+                self.html = page.read().decode("utf8")
+        except:
+            self._error("Ugyldig url.")
+
+        # finner alle relevante lenker og fjerner duplikater
+        links = re.findall(link_pat, self.html)
+        links = set(links)
+
+        self.out_dir = Prompt.ask("Angi mappe for output (enter for å bruke gjeldende mappe)", default=".")
+
+        while not self._validate_input(self.out_dir, self.invalid_chars):
+            self.out_dir = Prompt.ask(f"Unngå å bruke følgende symboler: [#fc0303]<, >, :, \", |, ?, *[/#fc0303]\nAngi mappe for output (enter for å bruke gjeldende mappe)", default=".")
+        
+        clean = Prompt.ask("Beholde .zip-arkiver?", choices=["y","n"], default="n")
+
+        self.cleanup = False if clean == "y" else True
+
+        # antall .zip-lenker funnet
+        self.n_files = len(links)
+
+        # verifiserer at det er minst et arkiv på angitt url
+        if not self.n_files > 0:
+            self._error(f"Fant ingen .zip-arkiver på: {self.url}")
+
+        confirm = self._summary_confirm()
+
+        if confirm == False:
+            self.console.print("\n[bold green blink]Avbrutt av bruker![/bold green blink]")
+            
+            self._retry()
+
+        else:
+            for link in track(links,f"Laster ned {self.n_files} arkiver og ekstraherer til '{self.out_dir}'..."):
+                # isolerer filnavn fra lenke
+                name = re.search(self.zip_pat, link).group()
+
+                # laster ned fil med link
+                urllib.request.urlretrieve(link, name)
+
+                # pakker ut innhold til folder_out/name
+                with zipfile.ZipFile(name, 'r') as zip_ref:
+                    subfolder = re.search(self.subfold_pat, name).group()
+                    
+                    zip_ref.extractall(f"{self.out_dir}/{subfolder}")
+
+                # hvis valgt: sletter zipfil etter ekstraksjon
+                if self.cleanup:
+                    os.remove(name)
+
+            self.console.print("\n[bold green blink]Nedlasting/ekstraksjon fullført![/bold green blink]")
+
+    
+    def main(self) -> None:
+        # for å definere bredde på panel
+        W = os.get_terminal_size()[0]
+        # padding (venstre og høyre) defineres av bredde på terminal W - bredde på logo / 2
+        sidepad = int((W-88)/2)
+
+        self.console.print(Panel(self.logo, box=box.DOUBLE, padding=(2,sidepad), style="#90fc03", width=W, expand=False,subtitle="[#90fc03]av [u link https://talleraas.it/]talleraas.it[/u link https://talleraas.it/][/#90fc03]"))
+
+        self._core()
+
+        self._end()
+
+
+ZipFetcher().main()
