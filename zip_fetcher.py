@@ -89,6 +89,7 @@ class ZipFetcher:
                 self.html = page.read().decode("utf8")
         except:
             self._error("Ugyldig url.")
+            return
 
         # finner alle relevante lenker og fjerner duplikater
         links = re.findall(link_pat, self.html)
