@@ -34,8 +34,11 @@ class ZipFetcher:
 
         self.console.print(self.message["welcome"], style="green blink")
 
+        # TODO implementer ulike filtyper ordentlig (inkl alternativ meldingsflyt)
+        self.filetype = Prompt.ask(self.message["prompt_filetype"], choices=["zip","pdf"], default="zip")
+
         # regex mønstre
-        self.zip_pat = r"[A-Za-z0-9%_]+\.pdf" # .zip-fil
+        self.file_pat = r"[A-Za-z0-9%_]+\."+self.filetype # pattern for filename.filetype strings
         self.subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
         self.invalid_pat = r'[<>:"|?\*]' # ugyldige tegn for mappenavn ## TODO endre regler for ':' ?
     
@@ -85,7 +88,8 @@ class ZipFetcher:
         summary.add_row(self.message["_from_url"], url)
         summary.add_row(self.message["_n_files"], f"{n_files}")
         summary.add_row(self.message["_out_dir"], out_dir)
-        summary.add_row(self.message["_cleanup?"], f"{self.message['_no'] if cleanup else self.message['_yes']}")
+        if cleanup is not None:
+            summary.add_row(self.message["_cleanup?"], f"{self.message['_no'] if cleanup else self.message['_yes']}")
 
         self.console.print(summary)
 
@@ -93,9 +97,9 @@ class ZipFetcher:
     
 
     def _process_downloads(self) -> None:
-        url = Prompt.ask(self.message["prompt_url"], default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
+        url = Prompt.ask(self.message["prompt_url"].format(ftype=self.filetype), default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
 
-        link_pat = f"{url}{self.zip_pat}" if url[-1] == "/" else f"{url}/{self.zip_pat}" # .zip-fil lenker
+        link_pat = f"{url}{self.file_pat}" if url[-1] == "/" else f"{url}/{self.file_pat}" # .zip-fil lenker
         relative_link_pat = r"\/[0-9A-Za-z\/_-]*\/"
 
         # leser inn kildekode fra angitt nettside/url
@@ -110,12 +114,12 @@ class ZipFetcher:
         links = re.findall(link_pat, self.html)
         if len(links) < 1:
             url_root = re.search(r"http[s]{0,1}:\/\/([a-z0-9]+\.)+[a-z]{2,5}", url).group()
-            link_pat = f"{relative_link_pat}{self.zip_pat}"
+            link_pat = f"{relative_link_pat}{self.file_pat}"
 
             links = re.findall(link_pat, self.html)
 
             if len(links) < 1:
-                self._error(f"{self.message['err_no_zip_found']} {url}")
+                self._error(f"{self.message['err_no_file_found'].format(ftype=self.filetype)} {url}")
                 return
 
             links = [f"{url_root}{link}" for link in links]
@@ -130,9 +134,12 @@ class ZipFetcher:
             self.console.print(f"{self.message['warn_invalid_char']} [#fc0303]{self.invalid_chars}[/#fc0303]")
             out_dir = Prompt.ask(f"{self.message['prompt_out_dir']}", default=".")
         
-        clean = Prompt.ask(self.message["prompt_cleanup"], choices=["y","n"], default="n")
+        if self.filetype=="zip":
+            clean = Prompt.ask(self.message["prompt_cleanup"], choices=["y","n"], default="n")
 
-        cleanup = False if clean == "y" else True
+            cleanup = False if clean == "y" else True
+        else:
+            cleanup = None
 
         # antall .zip-lenker funnet
         n_files = len(links)
@@ -146,9 +153,9 @@ class ZipFetcher:
             return
 
         elif self.filetype=="zip":
-            for link in track(links,self.message["download_tracker"].format(n_files=n_files,out_dir=out_dir)):
+            for link in track(links,self.message["download_tracker_pdf"].format(n_files=n_files,out_dir=out_dir)):
                 # isolerer filnavn fra lenke
-                name = re.search(self.zip_pat, link).group()
+                name = re.search(self.file_pat, link).group()
 
                 # laster ned fil med link
                 urllib.request.urlretrieve(link, name)
@@ -164,9 +171,9 @@ class ZipFetcher:
                     os.remove(name)
         
         elif self.filetype=="pdf":
-            for link in track(links,self.message["download_tracker"].format(n_files=n_files,out_dir=out_dir)):
+            for link in track(links,self.message["download_tracker_pdf"].format(n_files=n_files,out_dir=out_dir,ftype=self.filetype)):
                 # isolerer filnavn fra lenke
-                name = re.search(self.zip_pat, link).group()
+                name = re.search(self.file_pat, link).group()
                 
                 if not os.path.exists(out_dir):
                     os.mkdir(out_dir)
@@ -175,12 +182,10 @@ class ZipFetcher:
                 urllib.request.urlretrieve(link, f"{out_dir}/{name}")
 
 
-        self.console.print(f"\n[bold green blink]{self.message['finished']}[/bold green blink]")
+        self.console.print(f"\n[bold green blink]{self.message[f'finished_{self.filetype}']}[/bold green blink]")
 
     
     def main(self) -> None:
-        # TODO implementer ulike filtyper ordentlig (inkl alternativ meldingsflyt)
-        self.filetype = "zip"
 
         self._process_downloads()
 
