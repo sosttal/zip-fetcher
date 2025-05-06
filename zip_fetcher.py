@@ -171,5 +171,4 @@ class ZipFetcher:
 
         self._terminate_program()
 
-
 ZipFetcher().main()
