@@ -4,7 +4,7 @@
 
 **Two options**:
 
-1. Download and run `zip_fetcher.py` (may need to install dependencies):
+1. Download `zip_fetcher.py` and `zf_res.py` and run with the following command (may need to install dependencies):
 ```bash
 python3 zip_fetcher.py
 ```
