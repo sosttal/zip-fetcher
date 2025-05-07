@@ -6,7 +6,7 @@
 
 1. Download and run `zip_fetcher.py` (may need to install dependencies):
 ```bash
-python3 zip_fetcher.py
+python zip_fetcher.py
 ```
 
 2. [Download](https://github.com/sosttal/zip-fetcher/raw/refs/heads/main/dist/ZIP-FETCHER.exe) and run `ZIP-FETCHER.exe` (Windows only).
@@ -18,7 +18,7 @@ python3 zip_fetcher.py
 
 GIF of sample-run:
 
-![](example/mappe_animated.gif)
+![](example/animated.gif)
 
 Rich-powered TUI:
 

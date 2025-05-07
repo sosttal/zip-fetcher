@@ -153,7 +153,7 @@ class ZipFetcher:
             return
 
         elif self.filetype=="zip":
-            for link in track(links,self.message["download_tracker_pdf"].format(n_files=n_files,out_dir=out_dir)):
+            for link in track(links,self.message["download_tracker_zip"].format(n_files=n_files,out_dir=out_dir)):
                 # isolerer filnavn fra lenke
                 name = re.search(self.file_pat, link).group()
 
