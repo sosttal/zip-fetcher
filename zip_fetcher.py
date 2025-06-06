@@ -21,9 +21,9 @@ class ZipFetcher:
 
         self.invalid_chars = "<, >, :, \", |, ?, *"
 
-         # for å definere bredde på panel
+         # width of terminal - used for determining width of panels
         W = os.get_terminal_size()[0]
-        # padding (venstre og høyre) defineres av bredde på terminal W - bredde på logo / 2
+        # padding (left and right) defined width of terminal W minus width of logo
         sidepad = int((W-88)/2)
 
         # header panel 
@@ -37,10 +37,10 @@ class ZipFetcher:
         # TODO implementer ulike filtyper ordentlig (inkl alternativ meldingsflyt)
         self.filetype = Prompt.ask(self.message["prompt_filetype"], choices=["zip","pdf"], default="zip")
 
-        # regex mønstre
+        # regexs
         self.file_pat = r"[A-Za-z0-9%_]+\."+self.filetype # pattern for filename.filetype strings
-        self.subfold_pat = r"[A-Za-z_0-9]+" # for navn på (under)mapper å pakke ut filer til
-        self.invalid_pat = r'[<>:"|?\*]' # ugyldige tegn for mappenavn ## TODO endre regler for ':' ?
+        self.subfold_pat = r"[A-Za-z_0-9]+" # for name of target (sub)folder
+        self.invalid_pat = r'[<>:"|?\*]' # invalid chars for folder names # TODO add support for ':' / absolute paths ?
     
 
     def _terminate_program(self) -> None:
@@ -64,7 +64,7 @@ class ZipFetcher:
             self._terminate_program()
         
     
-    def _validate_path(self,path:str) -> bool:
+    def _validate_out_dir(self,path:str) -> bool:
         """
         Check if path contains invalid symbols.
         -> True if no invalid symbols
@@ -77,7 +77,7 @@ class ZipFetcher:
     
 
     def _summary_confirm(self, url:str, n_files:int, out_dir:str, cleanup:bool) -> bool:
-        # oppsummering og bekreftelse
+        # summary and confirmation
         summary = Table(title=self.message["summary"], box=box.DOUBLE)
 
         summary.add_column("", justify="right", style="cyan")
@@ -97,12 +97,15 @@ class ZipFetcher:
     
 
     def _process_downloads(self) -> None:
-        url = Prompt.ask(self.message["prompt_url"].format(ftype=self.filetype), default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") # henter url fra bruker
+        # prompt user for source url
+        url = Prompt.ask(self.message["prompt_url"].format(ftype=self.filetype), default="https://www.uio.no/studier/emner/matnat/ifi/IN3050/v25/weekly-exercises/") 
 
-        link_pat = f"{url}{self.file_pat}" if url[-1] == "/" else f"{url}/{self.file_pat}" # .zip-fil lenker
+        # combined pattern to search for (absolute) urls ending in .filetype
+        link_pat = f"{url}{self.file_pat}" if url[-1] == "/" else f"{url}/{self.file_pat}"
+        # as a second option if no links are found using absolute path for relative links (e.g. /matnat/ifi/IN3050/v25/weekly-exercises/)
         relative_link_pat = r"\/[0-9A-Za-z\/_-]*\/"
 
-        # leser inn kildekode fra angitt nettside/url
+        # gets html for given url
         try:
             with urllib.request.urlopen(url) as page:
                 self.html = page.read().decode("utf8")
@@ -110,8 +113,10 @@ class ZipFetcher:
             self._error(self.message["err_invalid_url"])
             return
 
-        # finner alle relevante lenker og fjerner duplikater
+        # search source html for relevant urls
         links = re.findall(link_pat, self.html)
+        
+        # if no urls are found using absolute link
         if len(links) < 1:
             url_root = re.search(r"http[s]{0,1}:\/\/([a-z0-9]+\.)+[a-z]{2,5}", url).group()
             link_pat = f"{relative_link_pat}{self.file_pat}"
@@ -130,18 +135,20 @@ class ZipFetcher:
 
         out_dir = Prompt.ask(self.message["prompt_out_dir"], default=".")
 
-        while not self._validate_path(out_dir):
+        while not self._validate_out_dir(out_dir):
             self.console.print(f"{self.message['warn_invalid_char']} [#fc0303]{self.invalid_chars}[/#fc0303]")
             out_dir = Prompt.ask(f"{self.message['prompt_out_dir']}", default=".")
         
+        # ask to cleanup if zip option is chosen
         if self.filetype=="zip":
             clean = Prompt.ask(self.message["prompt_cleanup"], choices=["y","n"], default="n")
 
             cleanup = False if clean == "y" else True
+            # TODO: (?) prompt for directory to store zips in if cleanup is true (?)
         else:
             cleanup = None
 
-        # antall .zip-lenker funnet
+        # number of files found
         n_files = len(links)
 
         confirm = self._summary_confirm(url, n_files, out_dir, cleanup)
@@ -156,6 +163,12 @@ class ZipFetcher:
             for link in track(links,self.message["download_tracker_zip"].format(n_files=n_files,out_dir=out_dir)):
                 # isolerer filnavn fra lenke
                 name = re.search(self.file_pat, link).group()
+                
+                # TODO store zip-files in own subdir of out_dir
+                # zip_dir = "ZIP"
+
+                # if not os.path.exists(zip_dir):
+                #     os.mkdir(zip_dir)
 
                 # laster ned fil med link
                 urllib.request.urlretrieve(link, name)
